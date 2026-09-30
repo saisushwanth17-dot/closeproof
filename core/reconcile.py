@@ -15,6 +15,15 @@ class Evidence:
     value: str
     url: Optional[str] = None
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "source": self.source,
+            "doc_id": self.doc_id,
+            "field": self.field,
+            "value": self.value,
+            "url": self.url,
+        }
+
 
 @dataclass
 class ReconItem:
@@ -27,6 +36,18 @@ class ReconItem:
     explanation: Optional[str] = None
     citations: List[str] = field(default_factory=list)
     human_action: Optional[str] = None  # "approve_match" | "request_receipt" | "contact_vendor" | "write_off" | "escalate_accountant"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "amount": self.amount,
+            "status": self.status,
+            "candidates": [c.to_dict() for c in self.candidates],
+            "confidence": self.confidence,
+            "explanation": self.explanation,
+            "citations": self.citations,
+            "human_action": self.human_action,
+        }
 
 
 def _clean_str(s: Optional[str]) -> str:

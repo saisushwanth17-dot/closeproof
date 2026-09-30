@@ -137,12 +137,13 @@ def _classify_exception(t: Txn) -> Tuple[str, str]:
     notes = str(t.meta.get("notes", "")).lower() if t.meta else ""
     anomaly_id = str(t.meta.get("anomaly_id", "")).upper() if t.meta else ""
 
-    # Explicit anomaly override if tagged
-    if anomaly_id == "FEE-147" or "service fee" in memo or "bank fee" in memo or "fee" in memo or abs(abs(t.amount) - 147.0) <= 0.01:
-        return "write_off", "Bank service fee debit with no invoice/receipt"
-
+    # Personal / owner draw check first
     if anomaly_id == "PERSONAL" or "coffee" in merchant or "coffee" in memo or "owner draw" in memo or "personal" in memo or "personal" in notes or abs(abs(t.amount) - 18.50) <= 0.01:
         return "write_off", "Owner personal draw on business card"
+
+    # Explicit anomaly override if tagged or bank fee
+    if anomaly_id == "FEE-147" or "service fee" in memo or "bank fee" in memo or re.search(r"\bfee\b", memo) or abs(abs(t.amount) - 147.0) <= 0.01:
+        return "write_off", "Bank service fee debit with no invoice/receipt"
 
     if anomaly_id == "MISSING-RECEIPT" or "officedepot" in merchant or "office depot" in merchant or (t.source == "bank" and t.amount < 0):
         return "request_receipt", f"Bank expense to {t.merchant or 'merchant'} missing receipt documentation"

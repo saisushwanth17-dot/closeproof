@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CloseProofTelemetryEvent",
+  "description": "JSON Schema for Contract C Telemetry Events in CloseProof",
+  "type": "object",
+  "required": ["project", "event", "severity", "ts", "payload"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "const": "closeproof"
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "feed_ingested",
+        "recon_match",
+        "recon_exception",
+        "evidence_attached",
+        "tavily_lookup",
+        "explain_done",
+        "sandbox_result",
+        "packet_ready"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warn", "error"]
+    },
+    "ts": {
+      "type": "number",
+      "minimum": 0
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,12 @@
+{
+  "provenance": "synthetic-handwritten",
+  "run_id": "01JB0000000000000000000001",
+  "description": "Deterministic replay dataset covering all 8 forensic reconciliation anomalies with the $147 unrecorded bank fee as the primary demo beat.",
+  "generated_at": "2026-10-02T12:00:00Z",
+  "schema_version": "0.1.0",
+  "demo_beat_item_id": "rec_01jb_fee147",
+  "models": {
+    "normalization": "nano",
+    "explanation": "ultra"
+  }
+}

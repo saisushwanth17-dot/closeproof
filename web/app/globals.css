@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fafc; /* slate-50 */
+  --foreground: #0f172a; /* slate-900 */
+  --foreground-muted: #475569; /* slate-600 */
+  --foreground-subtle: #94a3b8; /* slate-400 */
+
+  --surface: #ffffff; /* white */
+  --surface-subtle: #f1f5f9; /* slate-100 */
+  --surface-panel: #f8fafc; /* slate-50 */
+  --surface-overlay: #ffffff;
+
+  --border: #e2e8f0; /* slate-200 */
+  --border-subtle: #cbd5e1; /* slate-300 */
+  --border-emphasis: #94a3b8; /* slate-400 */
+
+  --brand: #0284c7; /* sky-600 */
+  --brand-foreground: #ffffff;
+
+  --matched: #059669; /* emerald-600 */
+  --matched-bg: #ecfdf5; /* emerald-50 */
+  --matched-border: #a7f3d0; /* emerald-200 */
+
+  --exception: #d97706; /* amber-600 */
+  --exception-bg: #fffbeb; /* amber-50 */
+  --exception-border: #fde68a; /* amber-200 */
+
+  --info: #2563eb; /* blue-600 */
+  --info-bg: #eff6ff; /* blue-50 */
+  --info-border: #bfdbfe; /* blue-200 */
+}
+
+.dark {
+  --background: #090d16; /* deep slate-950 */
+  --foreground: #f1f5f9; /* slate-100 */
+  --foreground-muted: #94a3b8; /* slate-400 */
+  --foreground-subtle: #64748b; /* slate-500 */
+
+  --surface: #0f172a; /* slate-900 */
+  --surface-subtle: #1e293b; /* slate-800 */
+  --surface-panel: #111827; /* gray-900 / dark slate */
+  --surface-overlay: #1e293b;
+
+  --border: #1e293b; /* slate-800 */
+  --border-subtle: #334155; /* slate-700 */
+  --border-emphasis: #475569; /* slate-600 */
+
+  --brand: #38bdf8; /* sky-400 */
+  --brand-foreground: #090d16;
+
+  --matched: #34d399; /* emerald-400 */
+  --matched-bg: rgba(6, 78, 59, 0.2); /* emerald-950 with alpha */
+  --matched-border: #065f46; /* emerald-800 */
+
+  --exception: #fbbf24; /* amber-400 */
+  --exception-bg: rgba(120, 53, 15, 0.2); /* amber-950 with alpha */
+  --exception-border: #92400e; /* amber-800 */
+
+  --info: #60a5fa; /* blue-400 */
+  --info-bg: rgba(30, 58, 138, 0.2); /* blue-950 with alpha */
+  --info-border: #1e40af; /* blue-800 */
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scoped transition for theme shifts - NEVER global * wildcard */
+.theme-transition {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Ensure all animation respects reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Print-specific stylesheet for close packet export */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #packet-preview-section,
+  #packet-preview-section * {
+    visibility: visible;
+  }
+
+  #packet-preview-section {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 24px;
+    border: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  #packet-preview-section .overflow-y-auto {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}

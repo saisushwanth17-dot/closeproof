@@ -10,6 +10,7 @@ from core.ledger import Txn
 from core.reconcile import reconcile, ReconItem, Evidence
 from core.packet import generate_close_packet
 from core.explain import explain_exceptions
+from core.enrich import enrich_exception
 
 app = FastAPI(title="CloseProof API", version="1.0")
 
@@ -223,12 +224,12 @@ def root():
     return {"message": "CloseProof API is live. Built on Nebius & NVIDIA."}
 
 
-@app.post("/api/run", response_model=RunResponse)
 @app.post("/api/runs", response_model=RunResponse)
 def start_reconciliation():
     """
     Triggers a reconciliation run over the fixture transactions for the demo.
-    Detects all 8 planted anomalies and stores results in RUNS_DB.
+    Detects all 8 planted anomalies, explains them with Nemotron Ultra,
+    and enriches with live Tavily web search citations.
     """
     run_id = str(uuid.uuid4())
     mock_txns = get_mock_transactions()
@@ -238,10 +239,8 @@ def start_reconciliation():
     # Run AI forensic explanations powered by Nemotron Ultra
     items = explain_exceptions(items)
 
-    # Attach citations where applicable (e.g. Chase fee schedule for $147)
-    for item in items:
-        if abs(abs(item.amount) - 147.0) < 0.01:
-            item.citations = ["https://www.chase.com/business/checking/fees"]
+    # Enrich exceptions with live Tavily web search citations
+    items = [enrich_exception(i) for i in items]
 
     RUNS_DB[run_id] = items
 

@@ -14,7 +14,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(data["message"], "CloseProof API is live. Built on Nebius & NVIDIA.")
 
     def test_start_reconciliation_endpoint(self):
-        response = self.client.post("/api/run")
+        response = self.client.post("/api/runs")
         self.assertEqual(response.status_code, 200)
         data = response.json()
 

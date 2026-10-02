@@ -224,13 +224,15 @@ def reconcile(txns: List[Txn]) -> List[ReconItem]:
         used_ids.add(orig.id)
         used_ids.add(dup.id)
 
+        evidence.append(Evidence(source="rule_engine", doc_id=f"{orig.id}_{dup.id}", field="rule_hint", value="Duplicate payout import detected"))
+
         items.append(ReconItem(
             id=f"dup_{orig.id}_{dup.id}",
             amount=orig.amount,
             status="exception",
             candidates=evidence,
             confidence=0.50,
-            explanation=f"Duplicate payout import detected: {orig.id} and {dup.id} both imported for {orig.amount}.",
+            explanation=None,
             human_action="approve_match"  # Keep one, void duplicate
         ))
 
@@ -423,13 +425,16 @@ def reconcile(txns: List[Txn]) -> List[ReconItem]:
         if t.merchant:
             candidates.append(Evidence(source=t.source, doc_id=t.id, field="merchant", value=t.merchant))
 
+        if reason:
+            candidates.append(Evidence(source="rule_engine", doc_id=t.id, field="rule_hint", value=reason))
+
         items.append(ReconItem(
             id=f"exc_{t.id}",
             amount=t.amount,
             status="exception",
             candidates=candidates,
             confidence=0.0,
-            explanation=reason,
+            explanation=None,
             human_action=human_action
         ))
 

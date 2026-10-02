@@ -9,6 +9,7 @@ import uuid
 from core.ledger import Txn
 from core.reconcile import reconcile, ReconItem, Evidence
 from core.packet import generate_close_packet
+from core.explain import explain_exceptions
 
 app = FastAPI(title="CloseProof API", version="1.0")
 
@@ -233,6 +234,9 @@ def start_reconciliation():
     mock_txns = get_mock_transactions()
 
     items = reconcile(mock_txns)
+
+    # Run AI forensic explanations powered by Nemotron Ultra
+    items = explain_exceptions(items)
 
     # Attach citations where applicable (e.g. Chase fee schedule for $147)
     for item in items:

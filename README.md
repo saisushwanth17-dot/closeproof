@@ -9,6 +9,8 @@
 
 CloseProof is an enterprise-grade autonomous month-end close and forensic reconciliation platform. Combining deterministic code-level mathematical reconciliation with dual-tier NVIDIA Nemotron reasoning models and live cited web enrichment, CloseProof turns painful, multi-day month-end financial reviews into a verifiable, audit-ready closing workflow.
 
+> 📖 **Complete Walkthrough:** For a 10-minute guide explaining how CloseProof works, the 5 human actions, the 8 anomaly classes, and full developer onboarding, see the [CloseProof Complete User Guide](docs/USER_GUIDE.md).
+
 ---
 
 ## The Principle: "Proof, Not Ledger Edits"
@@ -152,7 +154,13 @@ NEBIUS_MODEL_NANO=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B
 
 ### 3. Run the Backend API Server
 ```bash
+# macOS / Linux (with venv activated):
 uvicorn api.main:app --reload --port 8000
+
+# Windows (Command Prompt / PowerShell):
+python -m uvicorn api.main:app --reload --port 8000
+# or direct executable path:
+.venv\Scripts\python.exe -m uvicorn api.main:app --reload --port 8000
 ```
 Interactive OpenAPI documentation will be available at [http://localhost:8000/docs](http://localhost:8000/docs).
 

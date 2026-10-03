@@ -66,7 +66,8 @@ def explain_exceptions(items: List[ReconItem]) -> List[ReconItem]:
                         {"role": "user", "content": user_prompt}
                     ],
                     temperature=0.1,
-                    response_format={"type": "json_object"}
+                    response_format={"type": "json_object"},
+                    timeout=5.0,
                 )
 
                 # Parse and update the item
@@ -75,8 +76,8 @@ def explain_exceptions(items: List[ReconItem]) -> List[ReconItem]:
                 if "confidence" in result and isinstance(result["confidence"], (int, float)):
                     item.confidence = float(result["confidence"])
 
-                # If the AI suggests a different/better action, update it
-                if result.get("recommended_action"):
+                # Only fallback to AI suggested action if not already assigned by reconciliation engine
+                if not item.human_action and result.get("recommended_action"):
                     item.human_action = result["recommended_action"]
 
             except Exception as e:

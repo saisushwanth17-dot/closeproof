@@ -1,22 +1,69 @@
-import { type FC, useEffect, useState } from 'react';
+import { type FC, useEffect, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { CloseRoomState } from '@/lib/store/types';
-import { selectPacketDiscrepancy } from '@/lib/store/selectors';
+import { selectPacketDiscrepancy, selectUnreconciledCents } from '@/lib/store/selectors';
 import { formatCentsAsCurrency } from '@/lib/formatters';
 import { Badge } from '@/components/common/Badge';
-import { getPacketExportUrl } from '@/lib/api/config';
+import { getPacketExportUrl, getHttpApiUrl } from '@/lib/api/config';
 
 type PacketPreviewProps = {
   state: CloseRoomState;
   className?: string;
+  markdownContent?: string | null;
 };
 
-export const PacketPreview: FC<PacketPreviewProps> = ({ state, className = '' }) => {
+/**
+ * Parses summary KPI numbers from markdown header if available.
+ * Handles both table format and bullet list format.
+ */
+function parsePacketMarkdownTotals(markdown: string): {
+  matchedCount: number;
+  exceptionCount: number;
+  totalUnreconciledCents: number;
+} | null {
+  if (!markdown) return null;
+
+  // Format A: Markdown table from core/packet.py
+  // | **Match Rate** | **...%** (10 matched / 23 total) |
+  // | **Total Unreconciled Exceptions** | **$12,196.29** (13 exceptions) |
+  const matchTable = markdown.match(/\((\d+)\s+matched\s*\/\s*(\d+)\s+total\)/i);
+  const excTable = markdown.match(/Total Unreconciled Exceptions\*\*\s*\|\s*\*\*([^\*]+)\*\*\s*\((\d+)\s+exceptions?\)/i);
+
+  if (matchTable && excTable) {
+    const matchedCount = parseInt(matchTable[1], 10);
+    const exceptionCount = parseInt(excTable[2], 10);
+    const amountStr = excTable[1].replace(/[^0-9.-]+/g, '');
+    const totalUnreconciledCents = Math.round(parseFloat(amountStr) * 100);
+    return { matchedCount, exceptionCount, totalUnreconciledCents };
+  }
+
+  // Format B: Bullet list from packet.sample.md
+  const matchBullet = markdown.match(/Reconciled Transactions:\*\*\s*(\d+)/i);
+  const excBullet = markdown.match(/Unresolved Exceptions:\*\*\s*(\d+)/i);
+  const volBullet = markdown.match(/Total Gross Unreconciled Volume:\*\*\s*\$?([0-9,]+(?:\.[0-9]{2})?)/i);
+
+  if (matchBullet && excBullet && volBullet) {
+    const matchedCount = parseInt(matchBullet[1], 10);
+    const exceptionCount = parseInt(excBullet[1], 10);
+    const amountStr = volBullet[1].replace(/[^0-9.-]+/g, '');
+    const totalUnreconciledCents = Math.round(parseFloat(amountStr) * 100);
+    return { matchedCount, exceptionCount, totalUnreconciledCents };
+  }
+
+  return null;
+}
+
+export const PacketPreview: FC<PacketPreviewProps> = ({
+  state,
+  className = '',
+  markdownContent = null,
+}) => {
   const [sampleMarkdown, setSampleMarkdown] = useState<string>('');
+  const [liveMarkdown, setLiveMarkdown] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const discrepancy = selectPacketDiscrepancy(state);
 
   // Load sample markdown for replay mode
   useEffect(() => {
@@ -37,11 +84,68 @@ export const PacketPreview: FC<PacketPreviewProps> = ({ state, className = '' })
     };
   }, []);
 
+  // Fetch live packet if runId exists and markdownContent not explicitly supplied
+  useEffect(() => {
+    if (state.runId && state.mode === 'live' && !markdownContent) {
+      const apiUrl = getHttpApiUrl();
+      fetch(`${apiUrl}/api/runs/${encodeURIComponent(state.runId)}/packet.md`)
+        .then((res) => {
+          if (res.ok) return res.text();
+          throw new Error(`HTTP ${res.status}`);
+        })
+        .then((text) => setLiveMarkdown(text))
+        .catch((err) => console.warn('Could not fetch live packet in preview:', err));
+    }
+  }, [state.runId, state.mode, markdownContent]);
+
+  const activeMarkdown = markdownContent || liveMarkdown || sampleMarkdown;
+
+  // Derived live items totals from state
+  const reducedMatched = Object.keys(state.matchedItems).length;
+  const reducedExceptions = Object.keys(state.exceptions).length;
+  const reducedUnreconciledCents = selectUnreconciledCents(state);
+
+  // Header summary totals from state.packetSummary OR parsed from current active markdown
+  const summaryTotals = useMemo(() => {
+    if (state.packetSummary) {
+      return {
+        matchedCount: state.packetSummary.matchedCount,
+        exceptionCount: state.packetSummary.exceptionCount,
+        totalUnreconciledCents: state.packetSummary.totalUnreconciledCents,
+      };
+    }
+    return parsePacketMarkdownTotals(activeMarkdown);
+  }, [state.packetSummary, activeMarkdown]);
+
+  // Compute discrepancy client-side from the same arrays
+  const discrepancy = useMemo(() => {
+    if (!summaryTotals) {
+      return selectPacketDiscrepancy(state);
+    }
+    const isMatchedEqual = reducedMatched === summaryTotals.matchedCount;
+    const isExceptionEqual = reducedExceptions === summaryTotals.exceptionCount;
+    const isAmountEqual = Math.abs(reducedUnreconciledCents - summaryTotals.totalUnreconciledCents) <= 1;
+
+    if (!isMatchedEqual || !isExceptionEqual || !isAmountEqual) {
+      return {
+        reducedMatched,
+        reducedExceptions,
+        reducedUnreconciledCents,
+        summaryMatched: summaryTotals.matchedCount,
+        summaryExceptions: summaryTotals.exceptionCount,
+        summaryUnreconciledCents: summaryTotals.totalUnreconciledCents,
+      };
+    }
+    return null;
+  }, [summaryTotals, state, reducedMatched, reducedExceptions, reducedUnreconciledCents]);
+
+  const isVerified = Boolean(state.packetReady && !discrepancy);
+
   const mdExportUrl = state.runId ? getPacketExportUrl(state.runId, 'md') : null;
 
   const handleCopy = () => {
-    if (sampleMarkdown) {
-      navigator.clipboard.writeText(sampleMarkdown).then(() => {
+    if (activeMarkdown) {
+      navigator.clipboard.writeText(activeMarkdown).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       });
@@ -76,7 +180,7 @@ export const PacketPreview: FC<PacketPreviewProps> = ({ state, className = '' })
 
         {/* Export and Action Buttons */}
         <div className="flex items-center gap-2 no-print">
-          {sampleMarkdown && (
+          {activeMarkdown && (
             <button
               type="button"
               onClick={handleCopy}
@@ -134,10 +238,11 @@ export const PacketPreview: FC<PacketPreviewProps> = ({ state, className = '' })
         </div>
       </div>
 
-      {/* Discrepancy Warning Banner */}
-      {discrepancy && (
-        <div className="border-b border-exception-border bg-exception-bg px-4 py-2.5 text-xs text-exception">
+      {/* Two-State Discrepancy / Verification Banner */}
+      {discrepancy ? (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-400">
           <div className="flex items-center gap-1.5 font-semibold">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
             <span>Discrepancy detected between packet summary and reduced totals:</span>
           </div>
           <div className="mt-1 font-mono text-[11px] grid grid-cols-2 gap-2">
@@ -151,15 +256,25 @@ export const PacketPreview: FC<PacketPreviewProps> = ({ state, className = '' })
             </div>
           </div>
         </div>
-      )}
+      ) : isVerified ? (
+        <div className="border-b border-matched/30 bg-matched/10 px-4 py-2.5 text-xs text-matched flex items-center justify-between">
+          <div className="flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-matched shrink-0" />
+            <span>Packet totals verified against run ledger</span>
+          </div>
+          <div className="font-mono text-[11px] opacity-90">
+            {reducedMatched} matched · {reducedExceptions} exceptions · {formatCentsAsCurrency(reducedUnreconciledCents)} unreconciled
+          </div>
+        </div>
+      ) : null}
 
       {/* Markdown Content Area */}
       <div className="p-5 max-h-[460px] overflow-y-auto prose dark:prose-invert prose-xs max-w-none text-foreground">
-        {state.mode === 'live' && !state.packetReady ? (
+        {state.mode === 'live' && !state.packetReady && !activeMarkdown ? (
           <div className="text-center text-xs text-foreground-muted py-8 font-mono">
             Live stream connected. Standby for packet_ready telemetry frame...
           </div>
-        ) : sampleMarkdown ? (
+        ) : activeMarkdown ? (
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -175,7 +290,7 @@ export const PacketPreview: FC<PacketPreviewProps> = ({ state, className = '' })
               ),
             }}
           >
-            {sampleMarkdown}
+            {activeMarkdown}
           </ReactMarkdown>
         ) : loadError ? (
           <div className="text-center text-xs text-foreground-muted py-8">

@@ -13,11 +13,11 @@ import { formatCentsAsCurrency, formatConfidence, formatDuration } from '@/lib/f
 import { CLOSE_STAGES } from '@/lib/contracts/contractC';
 import { Badge } from '@/components/common/Badge';
 import { MatchRateRing } from '@/components/common/MatchRateRing';
-import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 type CloseRoomHeaderProps = {
   state: CloseRoomState;
   lifecycle?: RunLifecycle;
+  isDemoMode?: boolean;
   onOpenIntake?: () => void;
   className?: string;
 };
@@ -25,6 +25,7 @@ type CloseRoomHeaderProps = {
 export const CloseRoomHeader: FC<CloseRoomHeaderProps> = ({
   state,
   lifecycle = 'active',
+  isDemoMode = false,
   onOpenIntake,
   className = '',
 }) => {
@@ -123,19 +124,15 @@ export const CloseRoomHeader: FC<CloseRoomHeaderProps> = ({
               <span className="text-foreground-subtle italic text-xs">Run ID pending</span>
             )}
 
-            {state.malformedCount > 0 && (
+            {!isDemoMode && state.malformedCount > 0 && (
               <Badge variant="warning">{state.malformedCount} malformed</Badge>
             )}
-            {state.warningCount > 0 && (
+            {!isDemoMode && state.warningCount > 0 && (
               <Badge variant="warning">{state.warningCount} warnings</Badge>
             )}
-            {state.errorCount > 0 && (
+            {!isDemoMode && state.errorCount > 0 && (
               <Badge variant="error">{state.errorCount} errors</Badge>
             )}
-
-            <div className="border-l border-border pl-3">
-              <ThemeToggle />
-            </div>
           </div>
         </div>
       </div>

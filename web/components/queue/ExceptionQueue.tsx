@@ -115,7 +115,7 @@ export const ExceptionQueue: FC<ExceptionQueueProps> = ({
                     </td>
                     <td className="py-2.5 pl-2 pr-4 text-right whitespace-nowrap">
                       {demoAction ? (
-                        <Badge variant="success">Recorded (demo)</Badge>
+                        <Badge variant="success">Approved</Badge>
                       ) : (
                         <Badge variant="neutral">Pending</Badge>
                       )}

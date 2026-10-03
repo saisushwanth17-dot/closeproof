@@ -20,6 +20,7 @@ import { SourceStatusStrip } from '@/components/closeroom/SourceStatusStrip';
 import { DataIntake } from '@/components/intake/DataIntake';
 import { WhyNemotron } from '@/components/common/WhyNemotron';
 import { getHttpApiUrl } from '@/lib/api/config';
+import { dollarsToCents } from '@/lib/formatters';
 import {
   type SourceKey,
   type StagedSourceFile,
@@ -29,9 +30,10 @@ import {
 
 type CloseRoomProps = {
   initialMode?: SourceMode;
+  initialDemo?: boolean;
 };
 
-export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
+export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false }) => {
   const wsUrl = process.env.NEXT_PUBLIC_WS_URL || '';
   const defaultMode: SourceMode = initialMode ?? (wsUrl ? 'live' : 'replay');
 
@@ -43,6 +45,22 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
   const [activeTab, setActiveTab] = useState<'closeroom' | 'intake'>('closeroom');
   const [lifecycle, setLifecycle] = useState<RunLifecycle>('ready');
   const [isRunningClose, setIsRunningClose] = useState(false);
+  const [packetMarkdown, setPacketMarkdown] = useState<string | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(Boolean(initialDemo));
+
+  // Re-fetch GET /api/runs/{run_id}/packet.md and update preview
+  const fetchPacket = async (rId: string) => {
+    try {
+      const apiUrl = getHttpApiUrl();
+      const res = await fetch(`${apiUrl}/api/runs/${encodeURIComponent(rId)}/packet.md`);
+      if (res.ok) {
+        const md = await res.text();
+        setPacketMarkdown(md);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch packet.md:', err);
+    }
+  };
 
   // Fetch demo JSONL dataset on client mount for replay mode fallback
   useEffect(() => {
@@ -99,6 +117,21 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
     }
   }, [state.packetReady, events.length, lifecycle]);
 
+  // Check for ?demo=1 query parameter: hides dev badges, preloads replay, forces dark theme
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('demo') === '1' || params.get('demo') === 'true' || initialDemo) {
+        setIsDemoMode(true);
+        switchMode('replay');
+        document.documentElement.classList.add('dark');
+        try {
+          localStorage.setItem('closeproof-theme', 'dark');
+        } catch {}
+      }
+    }
+  }, [switchMode, initialDemo]);
+
   // Live "Run Close" handler calling POST /api/runs
   const handleRunClose = async () => {
     setIsRunningClose(true);
@@ -124,6 +157,8 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
       const items: ReconItem[] = data.items || [];
 
       setRunId(runId);
+      // Immediately fetch live packet on run completion
+      fetchPacket(runId);
 
       // Check WebSocket connection or activate Polling fallback
       const wsTargetUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws/telemetry';
@@ -221,12 +256,27 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
         }
       });
 
+      const matchedItems = items.filter((i) => i.status === 'matched');
+      const exceptionItems = items.filter((i) => i.status === 'exception');
+      const totalUnreconciledCents = exceptionItems.reduce(
+        (acc, item) => acc + Math.abs(dollarsToCents(item.amount)),
+        0
+      );
+
       liveEvents.push({
         project: 'closeproof',
         event: 'packet_ready',
         severity: 'info',
         ts: now + (items.length + 2) * 250,
-        payload: { run_id: runId, status: 'ready' },
+        payload: {
+          run_id: runId,
+          status: 'ready',
+          summary: {
+            matched_count: matchedItems.length,
+            exception_count: exceptionItems.length,
+            total_unreconciled_cents: totalUnreconciledCents,
+          },
+        },
       });
 
       // Stream events into state with smooth pacing
@@ -236,6 +286,7 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
           if (i === liveEvents.length - 1) {
             setLifecycle('completed');
             setIsRunningClose(false);
+            fetchPacket(runId);
           }
         }, i * 120);
       });
@@ -310,6 +361,7 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
                 <CloseRoomHeader
                   state={state}
                   lifecycle={lifecycle}
+                  isDemoMode={isDemoMode}
                   onOpenIntake={() => setActiveTab('intake')}
                 />
               </section>
@@ -369,7 +421,7 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
 
               {/* 7. Packet Section */}
               <section id="packet" className="scroll-mt-18">
-                <PacketPreview state={state} />
+                <PacketPreview state={state} markdownContent={packetMarkdown} />
               </section>
 
               {/* 8. Architecture Section */}
@@ -386,6 +438,9 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode }) => {
                 onActionSuccess={(itemId, action) => {
                   recordDemoAction(itemId, action);
                   setSelectedItemId(null);
+                  if (state.runId) {
+                    fetchPacket(state.runId);
+                  }
                 }}
               />
             </>

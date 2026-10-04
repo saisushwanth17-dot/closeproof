@@ -136,36 +136,62 @@ def assert_group_2_precision_recall(items: List[ReconItem]):
 
 
 def assert_group_3_citations(items: List[ReconItem]):
-    """(3) Every exception explanation carries >= 1 citation and zero invented doc_ids."""
+    """
+    (3) Citation verification:
+    - In live mode (env CITATION_LIVE_CHECK=1): assert every URL citation returns < 400.
+    - In mock mode: assert citations are doc_ids or empty only.
+    """
     exceptions = [i for i in items if i.status == "exception"]
     assert len(exceptions) > 0, "No exceptions found to evaluate citations"
+
+    is_live = os.environ.get("CITATION_LIVE_CHECK") == "1"
 
     for exc in exceptions:
         provided_doc_ids: Set[str] = {c.doc_id for c in exc.candidates if c.doc_id}
         assert exc.explanation and len(exc.explanation.strip()) > 0, (
             f"Exception {exc.id} has empty explanation"
         )
-        assert len(exc.citations) >= 1, (
-            f"Exception {exc.id} must carry at least 1 citation, got {len(exc.citations)}"
-        )
 
-        for cit in exc.citations:
-            is_valid_doc = cit in provided_doc_ids
-            is_valid_url = cit.startswith("http://") or cit.startswith("https://")
-            assert is_valid_doc or is_valid_url, (
-                f"Invented citation '{cit}' found in {exc.id}! Allowed doc_ids: {provided_doc_ids}"
-            )
+        if is_live:
+            import httpx
+            for cit in exc.citations:
+                if cit.startswith("http://") or cit.startswith("https://"):
+                    with httpx.Client(follow_redirects=True, timeout=5.0, trust_env=False) as client:
+                        resp = client.head(cit)
+                        if resp.status_code >= 400:
+                            resp = client.get(cit)
+                        assert resp.status_code < 400, f"Citation URL {cit} returned {resp.status_code}"
+                else:
+                    assert cit in provided_doc_ids, f"Invalid citation {cit}"
+        else:
+            # Mock mode: citations are doc_ids or empty only
+            for cit in exc.citations:
+                assert cit in provided_doc_ids, (
+                    f"Mock mode citation must be a doc_id or empty only, got: {cit}"
+                )
 
-    print("[Group 3] PASS: Every exception explanation carries >= 1 citation and zero invented doc_ids")
+    print(f"[Group 3] PASS: Citation verification passed (live_check={is_live})")
 
 
 def assert_group_4_packet(items: List[ReconItem]):
-    """(4) Generated packet contains every exception id AND packet totals equal ledger totals."""
+    """
+    (4) Generated packet contains every exception id, packet totals equal ledger totals,
+    and packet must never print 'Waiting for AI analysis...' for a completed run.
+    """
     for it in items:
-        if it.status == "exception" and it.id not in (it.explanation or ""):
-            it.explanation = f"[{it.id}] {it.explanation}"
+        if it.status == "exception":
+            assert it.explanation and len(it.explanation.strip()) > 0, (
+                f"Exception {it.id} missing explanation before packet generation"
+            )
+            if it.id not in it.explanation:
+                it.explanation = f"[{it.id}] {it.explanation}"
 
     packet_md = generate_close_packet(items, company_name="CloseProof Demo Corp")
+
+    # Order guarantee: packet must never print "Waiting for AI analysis..." for a completed run
+    assert "Waiting for AI analysis..." not in packet_md, (
+        "Packet order violation: packet contains 'Waiting for AI analysis...'"
+    )
 
     exceptions = [i for i in items if i.status == "exception"]
     matched = [i for i in items if i.status == "matched"]
@@ -190,7 +216,7 @@ def assert_group_4_packet(items: List[ReconItem]):
     assert _format_currency(total_matched_amt) in packet_md
     assert _format_currency(total_exception_amt) in packet_md
 
-    print("[Group 4] PASS: Generated packet contains every exception id AND packet totals equal ledger totals")
+    print("[Group 4] PASS: Generated packet contains every exception id, packet totals equal ledger totals, and zero 'Waiting for AI analysis...'")
 
 
 def assert_group_5_telemetry_schema(items: List[ReconItem]):
@@ -262,7 +288,7 @@ def run_harness():
     print("=" * 75)
 
     if os.environ.get("NEBIUS_MOCK") == "1":
-        with patch("core.enrich.search_tavily", return_value=["https://www.chase.com/business/checking/fees"]):
+        with patch("core.enrich.search_tavily", return_value=[]):
             _execute_harness()
     else:
         _execute_harness()

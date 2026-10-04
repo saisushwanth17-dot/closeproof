@@ -272,7 +272,7 @@ class TestExplanationAndEnrichment(unittest.TestCase):
 
             # Assert no synthesized URLs in citations
             for c in enriched.citations:
-                self.assertNotIn("chase.com", c)
+                self.assertNotIn("example.com", c)
                 self.assertNotIn("stripe.com", c)
 
     def test_simulated_tavily_success(self):
@@ -291,8 +291,9 @@ class TestExplanationAndEnrichment(unittest.TestCase):
             citations=["bank_fee_147"],
         )
 
-        sample_url = "https://www.chase.com/commercial-banking/fees"
-        with patch("core.enrich.search_tavily", return_value=[sample_url]):
+        sample_url = "https://example.com/commercial-banking/fees"
+        with patch("core.enrich.search_tavily", return_value=[sample_url]), \
+             patch("core.enrich.verify_citations", return_value=[sample_url]):
             enriched = enrich_exception(item)
 
             self.assertIn(sample_url, enriched.citations)

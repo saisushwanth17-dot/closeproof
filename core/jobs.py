@@ -76,7 +76,7 @@ def _mock_ocr_extraction(path: str) -> Dict[str, Any]:
         }
     elif "fee" in p_lower or "147" in p_lower:
         return {
-            "merchant": "Chase Commercial Banking",
+            "merchant": "National Commercial Banking",
             "date": "2026-09-01",
             "total": 147.00,
             "currency": "USD",

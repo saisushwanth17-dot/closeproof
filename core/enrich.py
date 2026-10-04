@@ -72,21 +72,61 @@ def search_tavily(query: str) -> List[str]:
     Searches Tavily with LRU caching (512 entries).
     Returns list of real URLs found by Tavily.
     """
+    if os.environ.get("NEBIUS_MOCK") == "1":
+        return []
     api_key = os.environ.get("TAVILY_API_KEY")
     if not api_key:
         raise RuntimeError("TAVILY_API_KEY not configured")
     return list(_cached_tavily_search(query, api_key))
 
 
+def verify_citations(urls: List[str], timeout: float = 3.0) -> List[str]:
+    """
+    Verifies URL liveness via HTTP HEAD (fallback GET) with follow_redirects=True.
+    Returns only URLs that respond with HTTP status code < 400.
+    Checks at most 3 URLs.
+    """
+    import httpx
+
+    verified: List[str] = []
+    target_urls = urls[:3]
+    headers = {"User-Agent": "CloseProof-CitationVerifier/1.0"}
+
+    for url in target_urls:
+        if not (url.startswith("http://") or url.startswith("https://")):
+            continue
+        try:
+            with httpx.Client(follow_redirects=True, timeout=timeout, trust_env=False, headers=headers) as client:
+                try:
+                    resp = client.head(url)
+                    if resp.status_code < 400:
+                        verified.append(url)
+                        continue
+                    elif resp.status_code in (403, 404, 405, 501):
+                        resp = client.get(url)
+                        if resp.status_code < 400:
+                            verified.append(url)
+                            continue
+                except Exception:
+                    resp = client.get(url)
+                    if resp.status_code < 400:
+                        verified.append(url)
+                        continue
+        except Exception:
+            pass
+
+    return verified
+
+
 def enrich_exception(item: ReconItem) -> ReconItem:
     """
-    Enriches an exception item using human_action query templates and Tavily Search.
+    Enriches an exception item using human_action query templates and Tavily Search,
+    followed by citation liveness verification.
     
     INTEGRITY CONTRACT:
     - Citations may ONLY ever be (a) doc_ids present in the supplied evidence or
-      (b) URLs actually returned by Tavily.
-    - Never synthesizes fallback domains.
-    - On Tavily timeout/error: citations = [] AND appends
+      (b) live URLs returned by Tavily that pass verify_citations (< 400 status).
+    - If zero survive: citations = [] AND append
       'External verification unavailable at run time.' to the explanation.
     """
     if item.status != "exception":
@@ -96,18 +136,23 @@ def enrich_exception(item: ReconItem) -> ReconItem:
     query = get_enrichment_query(merchant, item.human_action or "")
 
     try:
-        urls = search_tavily(query)
+        raw_urls = search_tavily(query)
+        survived_urls = verify_citations(raw_urls, timeout=3.0)
 
         # Retain only valid doc_ids from supplied evidence
         valid_doc_ids = {c.doc_id for c in item.candidates if c.doc_id}
-        kept_citations = [c for c in item.citations if c in valid_doc_ids]
+        kept_doc_ids = [c for c in item.citations if c in valid_doc_ids]
 
-        # Append only authentic URLs returned by Tavily
-        for u in urls:
-            if u not in kept_citations:
-                kept_citations.append(u)
-
-        item.citations = kept_citations
+        if survived_urls:
+            item.citations = kept_doc_ids + [u for u in survived_urls if u not in kept_doc_ids]
+        else:
+            item.citations = []
+            unavailable_phrase = "External verification unavailable at run time."
+            if item.explanation:
+                if "external verification unavailable" not in item.explanation.lower():
+                    item.explanation = f"{item.explanation.rstrip()} {unavailable_phrase}"
+            else:
+                item.explanation = unavailable_phrase
 
     except Exception:
         # On Tavily timeout/error: citations = [] AND append the sentence

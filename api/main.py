@@ -1,9 +1,12 @@
 import os
 import uuid
 import asyncio
+import shutil
+import tempfile
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -15,6 +18,7 @@ from core.packet import generate_close_packet
 from core.explain import explain_exceptions
 from core.enrich import enrich_exception
 from core.telemetry import make_envelope, ALLOWED_EVENTS
+from core.ingest import parse_bank_csv, parse_stripe_csv, parse_invoices_csv, parse_receipts
 from fixtures.loader import build_fixture_txns
 
 app = FastAPI(title="CloseProof API", version="1.0")
@@ -46,6 +50,11 @@ class ActionRequest(BaseModel):
     action: str
     status: Optional[str] = None
     note: Optional[str] = None
+
+
+class UploadResponse(BaseModel):
+    run_id: str
+    warnings: List[str] = []
 
 
 async def broadcast_telemetry(envelope: Dict[str, Any]):
@@ -124,11 +133,10 @@ async def run_reconciliation_pipeline(run_id: str, txns: List[Txn], items: List[
         await asyncio.sleep(0.01)
 
     # 3. explain_done (per exception)
-    if os.environ.get("NEBIUS_API_KEY"):
-        try:
-            items = await asyncio.wait_for(asyncio.to_thread(explain_exceptions, items), timeout=10.0)
-        except Exception as e:
-            print(f"explain_exceptions warning: {e}")
+    try:
+        items = await asyncio.wait_for(asyncio.to_thread(explain_exceptions, items), timeout=12.0)
+    except Exception as e:
+        items = explain_exceptions(items)
 
     for item in items:
         if item.status == "exception":
@@ -149,43 +157,32 @@ async def run_reconciliation_pipeline(run_id: str, txns: List[Txn], items: List[
             await asyncio.sleep(0.01)
 
     # 4. tavily_lookup (per enrichment)
-    if os.environ.get("TAVILY_API_KEY"):
-        enriched_items = []
-        for item in items:
+    enriched_items = []
+    for item in items:
+        if item.status == "exception":
             try:
-                item = await asyncio.wait_for(asyncio.to_thread(enrich_exception, item), timeout=1.5)
-            except Exception as e:
-                cand_str = " ".join(str(c.value) for c in item.candidates).lower()
-                m_str = (item.candidates[0].value if item.candidates else "").lower() + " " + cand_str
-                if "chase" in m_str or "fee" in m_str or "147" in m_str:
-                    item.citations.append("https://www.chase.com/business/checking/fees")
-                elif "stripe" in m_str:
-                    item.citations.append("https://stripe.com/docs/payouts")
-                elif "depot" in m_str:
-                    item.citations.append("https://www.officedepot.com/customer-service")
-            enriched_items.append(item)
-        items = enriched_items
-    else:
-        # Default citation for offline/test environments to ensure tavily_lookup event fires
-        for item in items:
-            if item.status == "exception" and any("chase" in str(c.value).lower() for c in item.candidates):
-                if not item.citations:
-                    item.citations.append("https://www.chase.com/business/checking/fees")
+                item = await asyncio.wait_for(asyncio.to_thread(enrich_exception, item), timeout=4.0)
+            except Exception:
+                item = enrich_exception(item)
+        enriched_items.append(item)
+    items = enriched_items
 
     for item in items:
         if item.status == "exception" and item.citations:
-            env = make_envelope(
-                event="tavily_lookup",
-                severity="info",
-                payload={
-                    "run_id": run_id,
-                    "item_id": item.id,
-                    "urls": item.citations,
-                },
-            )
-            RUNS_EVENTS[run_id].append(env)
-            await broadcast_telemetry(env)
-            await asyncio.sleep(0.01)
+            url_cites = [c for c in item.citations if c.startswith("http://") or c.startswith("https://")]
+            if url_cites:
+                env = make_envelope(
+                    event="tavily_lookup",
+                    severity="info",
+                    payload={
+                        "run_id": run_id,
+                        "item_id": item.id,
+                        "urls": url_cites,
+                    },
+                )
+                RUNS_EVENTS[run_id].append(env)
+                await broadcast_telemetry(env)
+                await asyncio.sleep(0.01)
 
     RUNS_DB[run_id] = items
 
@@ -245,6 +242,69 @@ async def start_reconciliation():
     return RunResponse(run_id=run_id, status="running", items=items)
 
 
+@app.post("/api/runs/upload", response_model=UploadResponse)
+async def upload_run(
+    bank_csv: Optional[UploadFile] = File(None),
+    stripe_csv: Optional[UploadFile] = File(None),
+    invoices_csv: Optional[UploadFile] = File(None),
+    receipts: List[UploadFile] = File([]),
+):
+    """
+    Ingests user-uploaded financial feeds (bank CSV, Stripe CSV, Invoices CSV, Receipt images/PDFs),
+    reconciles, explains, enriches, streams telemetry, and returns {run_id, warnings[]}.
+    """
+    run_id = str(uuid.uuid4())
+    warnings: List[str] = []
+    txns: List[Txn] = []
+
+    temp_dir = tempfile.mkdtemp(prefix=f"closeproof_up_{run_id[:8]}_")
+
+    try:
+        if bank_csv and bank_csv.filename:
+            b_path = Path(temp_dir) / f"bank_{bank_csv.filename}"
+            with open(b_path, "wb") as f:
+                shutil.copyfileobj(bank_csv.file, f)
+            txns.extend(parse_bank_csv(b_path, warnings))
+
+        if stripe_csv and stripe_csv.filename:
+            s_path = Path(temp_dir) / f"stripe_{stripe_csv.filename}"
+            with open(s_path, "wb") as f:
+                shutil.copyfileobj(stripe_csv.file, f)
+            txns.extend(parse_stripe_csv(s_path, warnings))
+
+        if invoices_csv and invoices_csv.filename:
+            i_path = Path(temp_dir) / f"invoices_{invoices_csv.filename}"
+            with open(i_path, "wb") as f:
+                shutil.copyfileobj(invoices_csv.file, f)
+            txns.extend(parse_invoices_csv(i_path, warnings))
+
+        if receipts:
+            r_paths = []
+            for r in receipts:
+                if r.filename:
+                    r_path = Path(temp_dir) / f"rec_{r.filename}"
+                    with open(r_path, "wb") as f:
+                        shutil.copyfileobj(r.file, f)
+                    r_paths.append(str(r_path))
+            if r_paths:
+                txns.extend(parse_receipts(r_paths, warnings))
+    except Exception as e:
+        warnings.append(f"Ingestion processing error: {e}")
+
+    if not txns:
+        warnings.append("No valid transactions found in uploaded files.")
+
+    items = reconcile(txns)
+
+    RUNS_STATUS[run_id] = "running"
+    RUNS_EVENTS[run_id] = []
+    RUNS_DB[run_id] = items
+
+    asyncio.create_task(run_reconciliation_pipeline(run_id, txns, items))
+
+    return UploadResponse(run_id=run_id, warnings=warnings)
+
+
 @app.get("/api/runs/{run_id}", response_model=RunResponse)
 def get_run(run_id: str):
     """Retrieves an existing reconciliation run by ID."""
@@ -268,11 +328,18 @@ def get_packet(run_id: str):
     """
     Generates the accountant-ready Markdown report FROM RUNS_DB[run_id] AT REQUEST TIME.
     Never returns a stale or cached string.
+    Guarantees explain+enrich has run so 'Waiting for AI analysis...' is never printed.
     """
     if run_id not in RUNS_DB:
         raise HTTPException(status_code=404, detail="Run not found")
 
     items = RUNS_DB[run_id]
+    pending = [i for i in items if i.status == "exception" and not i.explanation]
+    if pending:
+        items = explain_exceptions(items)
+        items = [enrich_exception(i) for i in items]
+        RUNS_DB[run_id] = items
+
     markdown = generate_close_packet(items, company_name="Acme Global Enterprises")
 
     return PlainTextResponse(content=markdown, media_type="text/markdown")

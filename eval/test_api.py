@@ -112,5 +112,38 @@ class TestAPI(unittest.TestCase):
         )
 
 
+    def test_upload_endpoint(self):
+        bank_csv = (
+            "Date,Description,Amount,Reference\n"
+            "2026-03-01,Client Wire ACME,5000.00,REF100\n"
+            "2026-03-02,Monthly Service Charge,-147.00,BANKFEE\n"
+        ).encode("utf-8")
+        invoices_csv = (
+            "Date,Customer,Total,InvoiceNumber\n"
+            "2026-03-01,ACME LLC,5000.00,INV-001\n"
+        ).encode("utf-8")
+
+        response = self.client.post(
+            "/api/runs/upload",
+            files={
+                "bank_csv": ("bank.csv", bank_csv, "text/csv"),
+                "invoices_csv": ("invoices.csv", invoices_csv, "text/csv"),
+            }
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("run_id", data)
+        self.assertIn("warnings", data)
+        self.assertIsInstance(data["warnings"], list)
+
+        run_id = data["run_id"]
+        # Verify run exists and has items
+        run_resp = self.client.get(f"/api/runs/{run_id}")
+        self.assertEqual(run_resp.status_code, 200)
+        run_data = run_resp.json()
+        self.assertEqual(run_data["run_id"], run_id)
+        self.assertTrue(len(run_data["items"]) > 0)
+
+
 if __name__ == "__main__":
     unittest.main()

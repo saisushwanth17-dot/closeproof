@@ -23,7 +23,7 @@ class TestPacket(unittest.TestCase):
                 status="exception",
                 confidence=0.0,
                 explanation="Bank service fee debit with no invoice/receipt",
-                citations=["https://chase.com/fee-schedule"],
+                citations=["https://bankfees.example.org/fee-schedule"],
                 human_action="write_off",
                 candidates=[Evidence(source="bank", doc_id="b_fee", field="memo", value="Monthly fee")]
             ),
@@ -60,7 +60,7 @@ class TestPacket(unittest.TestCase):
         # 2. Exceptions table checks
         self.assertIn("| Amount | Status | Human Action | Explanation | Citations |", md)
         self.assertIn("Waiting for AI analysis...", md)  # Fallback for None explanation
-        self.assertIn("[chase.com](https://chase.com/fee-schedule)", md)  # Formatted URL citation
+        self.assertIn("[bankfees.example.org](https://bankfees.example.org/fee-schedule)", md)  # Formatted URL citation
 
         # Check sorting: $320.00 must come before $147.00, and $147.00 before $18.50
         idx_320 = md.find("$320.00")

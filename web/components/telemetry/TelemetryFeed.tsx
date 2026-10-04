@@ -34,15 +34,20 @@ export const TelemetryFeed: FC<TelemetryFeedProps> = ({
     <div
       className={`flex flex-col border border-border bg-surface rounded overflow-hidden ${className}`}
       role="region"
-      aria-label="Real-time Telemetry Stream"
+      aria-label="Real-time Agent Activity"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-surface-subtle px-4 py-2.5">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-brand motion-safe:animate-pulse" aria-hidden="true" />
-          <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-            Telemetry Stream
-          </h2>
+          <div>
+            <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">
+              Agent Activity
+            </h2>
+            <p className="text-[10px] text-foreground-muted">
+              Streamed actions & thoughts
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 text-xs text-foreground-muted font-mono">
@@ -74,7 +79,7 @@ export const TelemetryFeed: FC<TelemetryFeedProps> = ({
       >
         {events.length === 0 ? (
           <div className="p-8 text-center text-xs text-foreground-muted">
-            Awaiting telemetry events from stream...
+            Awaiting agent activity...
           </div>
         ) : (
           <table className="w-full text-left border-collapse">
@@ -83,7 +88,7 @@ export const TelemetryFeed: FC<TelemetryFeedProps> = ({
                 <th className="py-1.5 pl-4 pr-2 font-mono">#</th>
                 <th className="py-1.5 px-2">Time (UTC)</th>
                 <th className="py-1.5 px-2">Severity</th>
-                <th className="py-1.5 px-2">Event</th>
+                <th className="py-1.5 px-2">Activity</th>
                 <th className="py-1.5 pl-2 pr-4">Summary</th>
               </tr>
             </thead>

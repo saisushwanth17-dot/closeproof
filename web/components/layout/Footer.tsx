@@ -11,6 +11,9 @@ export function Footer() {
           <p className="mt-0.5 text-slate-500">
             Core principle: CloseProof produces proof, not silent ledger changes.
           </p>
+          <p className="mt-1 text-slate-400 font-mono text-[11px]">
+            Powered by NVIDIA Nemotron · Tavily · Nebius open infrastructure
+          </p>
         </div>
 
         <nav aria-label="Legal and source links" className="flex items-center gap-6">

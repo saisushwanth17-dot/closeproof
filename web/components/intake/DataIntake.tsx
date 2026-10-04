@@ -109,6 +109,12 @@ export function DataIntake({
         </div>
       </div>
 
+      {SOURCE_KEYS.some((k) => stagedFiles[k]?.isSample) && (
+        <div className="mt-4 p-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-xs text-amber-700 dark:text-amber-400">
+          Sample company data (Acme Global). Upload your own files to run a real close.
+        </div>
+      )}
+
       {/* Grid of 4 Sources */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-6">
         {SOURCE_KEYS.map((key) => (

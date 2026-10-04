@@ -1,14 +1,15 @@
 'use client';
 
 import React from 'react';
-import { Play, Sparkles, ArrowDown, Shield, Cpu, Cloud, Search } from 'lucide-react';
+import { Play, Sparkles, ArrowDown, Shield, Upload } from 'lucide-react';
 
 interface HeroProps {
   onRunClose?: () => void;
+  onOpenUpload?: () => void;
   isRunning?: boolean;
 }
 
-export function Hero({ onRunClose, isRunning = false }: HeroProps) {
+export function Hero({ onRunClose, onOpenUpload, isRunning = false }: HeroProps) {
   return (
     <section
       id="overview"
@@ -51,15 +52,26 @@ export function Hero({ onRunClose, isRunning = false }: HeroProps) {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          {onOpenUpload && (
+            <button
+              type="button"
+              onClick={onOpenUpload}
+              className="inline-flex items-center gap-2 rounded bg-brand text-brand-foreground px-5 py-2.5 text-sm font-semibold hover:opacity-90 active:scale-95 transition-all shadow-md cursor-pointer"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Upload your own files</span>
+            </button>
+          )}
+
           {onRunClose && (
             <button
               type="button"
               onClick={onRunClose}
               disabled={isRunning}
-              className="inline-flex items-center gap-2 rounded bg-brand text-brand-foreground px-5 py-2.5 text-sm font-semibold hover:opacity-90 active:scale-95 disabled:opacity-50 transition-all shadow-md cursor-pointer"
+              className="inline-flex items-center gap-2 rounded border border-border bg-surface px-4 py-2.5 text-sm font-medium text-foreground hover:bg-surface-subtle transition-colors disabled:opacity-50 cursor-pointer"
             >
               <Play className="w-4 h-4 fill-current" />
-              <span>{isRunning ? 'Reconciling Live Ledger...' : 'Run Month-End Close'}</span>
+              <span>{isRunning ? 'Reconciling Live Ledger...' : 'Run sample close'}</span>
             </button>
           )}
 
@@ -72,29 +84,12 @@ export function Hero({ onRunClose, isRunning = false }: HeroProps) {
           </a>
         </div>
 
-        {/* Trust Chips */}
-        <div className="pt-6 border-t border-border/60">
-          <p className="text-[11px] uppercase tracking-wider font-semibold text-foreground-subtle mb-3">
-            Engineered on Open Inference & Evidence Verification
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-4">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-surface text-xs font-medium text-foreground shadow-2xs">
-              <Cpu className="w-3.5 h-3.5 text-emerald-500" />
-              NVIDIA Nemotron
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-surface text-xs font-medium text-foreground shadow-2xs">
-              <Cloud className="w-3.5 h-3.5 text-sky-500" />
-              Nebius Token Factory
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-surface text-xs font-medium text-foreground shadow-2xs">
-              <Search className="w-3.5 h-3.5 text-amber-500" />
-              Tavily
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-xs font-semibold text-emerald-600 dark:text-emerald-400 shadow-2xs">
-              <Shield className="w-3.5 h-3.5" />
-              Proof, not ledger edits
-            </span>
-          </div>
+        {/* Core Guarantee Chip: Hero keeps only the "Proof, not ledger edits" chip */}
+        <div className="pt-6 border-t border-border/60 flex justify-center">
+          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-xs font-semibold text-emerald-600 dark:text-emerald-400 shadow-2xs">
+            <Shield className="w-3.5 h-3.5" />
+            Proof, not ledger edits
+          </span>
         </div>
       </div>
     </section>

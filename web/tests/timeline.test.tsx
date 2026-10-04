@@ -55,7 +55,7 @@ describe('InvestigationTimeline Component', () => {
     render(<InvestigationTimeline item={sampleItem} events={sampleEvents} />);
 
     expect(screen.getByText('Exception Flagged')).toBeDefined();
-    expect(screen.getByText('Tavily Search')).toBeDefined();
+    expect(screen.getByText('Verified externally')).toBeDefined();
     expect(screen.queryByText(/Other Vendor/)).toBeNull();
     expect(screen.getByText(/Vendor query: "Bank Service Fee"/)).toBeDefined();
   });

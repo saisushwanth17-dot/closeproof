@@ -12,6 +12,7 @@ export const ALLOWED_EVENTS = [
   'explain_done',
   'sandbox_result',
   'packet_ready',
+  'action_applied',
 ] as const;
 
 export type TelemetryEventName = (typeof ALLOWED_EVENTS)[number];

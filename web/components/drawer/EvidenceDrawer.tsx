@@ -140,7 +140,7 @@ export function EvidenceDrawer({
           <div className="space-y-2">
             <h3 className="font-semibold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
               <ShieldAlert className="w-3.5 h-3.5 text-brand" />
-              Forensic Explanation (Nemotron-3-Ultra)
+              Forensic Explanation
             </h3>
 
             {item.explanation ? (
@@ -151,7 +151,7 @@ export function EvidenceDrawer({
               <div className="p-4 rounded border border-border bg-surface-subtle animate-pulse space-y-2.5">
                 <div className="flex items-center gap-2 text-brand font-medium text-xs">
                   <Loader2 className="w-4 h-4 animate-spin text-brand" />
-                  <span>Awaiting Nemotron Ultra analysis...</span>
+                  <span>Awaiting forensic analysis...</span>
                 </div>
                 <div className="h-2.5 bg-surface rounded w-5/6" />
                 <div className="h-2.5 bg-surface rounded w-4/6" />

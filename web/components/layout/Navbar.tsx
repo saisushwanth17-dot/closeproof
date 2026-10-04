@@ -53,10 +53,10 @@ export function Navbar({ onRunClose, isRunning = false }: NavbarProps) {
             Pipeline
           </a>
           <a
-            href="#telemetry"
+            href="#agent-activity"
             className="px-2.5 py-1.5 rounded hover:text-foreground hover:bg-surface-subtle transition-colors"
           >
-            Telemetry
+            Agent Activity
           </a>
           <a
             href="#exceptions"

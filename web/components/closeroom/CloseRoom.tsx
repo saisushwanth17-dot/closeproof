@@ -18,6 +18,7 @@ import { WorkflowStepper } from '@/components/workflow/WorkflowStepper';
 import { ProcessingPipeline } from '@/components/closeroom/ProcessingPipeline';
 import { SourceStatusStrip } from '@/components/closeroom/SourceStatusStrip';
 import { DataIntake } from '@/components/intake/DataIntake';
+import { UploadModal } from '@/components/intake/UploadModal';
 import { WhyNemotron } from '@/components/common/WhyNemotron';
 import { getHttpApiUrl } from '@/lib/api/config';
 import { dollarsToCents } from '@/lib/formatters';
@@ -47,6 +48,8 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
   const [isRunningClose, setIsRunningClose] = useState(false);
   const [packetMarkdown, setPacketMarkdown] = useState<string | null>(null);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(Boolean(initialDemo));
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
 
   // Re-fetch GET /api/runs/{run_id}/packet.md and update preview
   const fetchPacket = async (rId: string) => {
@@ -175,126 +178,158 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
         setConnectionState('polling');
       }
 
-      // Synthesize live telemetry frames from API run for real-time stream animation
-      const now = Date.now();
-      const liveEvents: TelemetryEvent[] = [
-        {
-          project: 'closeproof',
-          event: 'feed_ingested',
-          severity: 'info',
-          ts: now,
-          payload: { run_id: runId, source: 'bank_stripe_invoices_receipts', count: items.length },
-        },
-      ];
-
-      items.forEach((item, idx) => {
-        if (item.status === 'matched') {
-          liveEvents.push({
-            project: 'closeproof',
-            event: 'recon_match',
-            severity: 'info',
-            ts: now + (idx + 1) * 150,
-            payload: {
-              run_id: runId,
-              id: item.id,
-              amount: item.amount,
-              confidence: item.confidence,
-              explanation: item.explanation,
-              candidates: item.candidates,
-              citations: item.citations,
-            },
-          });
-        } else {
-          liveEvents.push({
-            project: 'closeproof',
-            event: 'recon_exception',
-            severity: 'warn',
-            ts: now + (idx + 1) * 150,
-            payload: {
-              run_id: runId,
-              id: item.id,
-              amount: item.amount,
-              confidence: item.confidence,
-              explanation: item.explanation,
-              human_action: item.human_action,
-              candidates: item.candidates,
-              citations: item.citations,
-            },
-          });
-
-          if (item.citations && item.citations.length > 0) {
-            liveEvents.push({
-              project: 'closeproof',
-              event: 'tavily_lookup',
-              severity: 'info',
-              ts: now + (idx + 1) * 200,
-              payload: {
-                run_id: runId,
-                item_id: item.id,
-                query: `${item.candidates.find((c) => c.field === 'merchant')?.value || 'vendor'} verification`,
-                urls: item.citations,
-              },
-            });
-          }
-
-          if (item.explanation) {
-            liveEvents.push({
-              project: 'closeproof',
-              event: 'explain_done',
-              severity: 'info',
-              ts: now + (idx + 1) * 250,
-              payload: {
-                run_id: runId,
-                item_id: item.id,
-                model_tier: 'ultra',
-                confidence: item.confidence,
-                explanation: item.explanation,
-                recommended_action: item.human_action,
-              },
-            });
-          }
-        }
-      });
-
-      const matchedItems = items.filter((i) => i.status === 'matched');
-      const exceptionItems = items.filter((i) => i.status === 'exception');
-      const totalUnreconciledCents = exceptionItems.reduce(
-        (acc, item) => acc + Math.abs(dollarsToCents(item.amount)),
-        0
-      );
-
-      liveEvents.push({
-        project: 'closeproof',
-        event: 'packet_ready',
-        severity: 'info',
-        ts: now + (items.length + 2) * 250,
-        payload: {
-          run_id: runId,
-          status: 'ready',
-          summary: {
-            matched_count: matchedItems.length,
-            exception_count: exceptionItems.length,
-            total_unreconciled_cents: totalUnreconciledCents,
-          },
-        },
-      });
-
-      // Stream events into state with smooth pacing
-      liveEvents.forEach((ev, i) => {
-        setTimeout(() => {
-          pushTelemetryEvent(ev);
-          if (i === liveEvents.length - 1) {
-            setLifecycle('completed');
-            setIsRunningClose(false);
-            fetchPacket(runId);
-          }
-        }, i * 120);
-      });
+      animateLiveRunEvents(runId, items);
     } catch (err) {
       console.warn('Live API unavailable or offline, playing demo replay feed:', err);
       setIsRunningClose(false);
       setLifecycle('active');
       play();
+    }
+  };
+
+  // Helper to animate live stream events into state with smooth pacing
+  const animateLiveRunEvents = (runId: string, items: ReconItem[]) => {
+    const now = Date.now();
+    const liveEvents: TelemetryEvent[] = [
+      {
+        project: 'closeproof',
+        event: 'feed_ingested',
+        severity: 'info',
+        ts: now,
+        payload: { run_id: runId, source: 'bank_stripe_invoices_receipts', count: items.length },
+      },
+    ];
+
+    items.forEach((item, idx) => {
+      if (item.status === 'matched') {
+        liveEvents.push({
+          project: 'closeproof',
+          event: 'recon_match',
+          severity: 'info',
+          ts: now + (idx + 1) * 150,
+          payload: {
+            run_id: runId,
+            id: item.id,
+            amount: item.amount,
+            confidence: item.confidence,
+            explanation: item.explanation,
+            candidates: item.candidates,
+            citations: item.citations,
+          },
+        });
+      } else {
+        liveEvents.push({
+          project: 'closeproof',
+          event: 'recon_exception',
+          severity: 'warn',
+          ts: now + (idx + 1) * 150,
+          payload: {
+            run_id: runId,
+            id: item.id,
+            amount: item.amount,
+            confidence: item.confidence,
+            explanation: item.explanation,
+            human_action: item.human_action,
+            candidates: item.candidates,
+            citations: item.citations,
+          },
+        });
+
+        if (item.citations && item.citations.length > 0) {
+          liveEvents.push({
+            project: 'closeproof',
+            event: 'tavily_lookup',
+            severity: 'info',
+            ts: now + (idx + 1) * 200,
+            payload: {
+              run_id: runId,
+              item_id: item.id,
+              query: `${item.candidates.find((c) => c.field === 'merchant')?.value || 'vendor'} verification`,
+              urls: item.citations,
+            },
+          });
+        }
+
+        if (item.explanation) {
+          liveEvents.push({
+            project: 'closeproof',
+            event: 'explain_done',
+            severity: 'info',
+            ts: now + (idx + 1) * 250,
+            payload: {
+              run_id: runId,
+              item_id: item.id,
+              model_tier: 'ultra',
+              confidence: item.confidence,
+              explanation: item.explanation,
+              recommended_action: item.human_action,
+            },
+          });
+        }
+      }
+    });
+
+    const matchedItems = items.filter((i) => i.status === 'matched');
+    const exceptionItems = items.filter((i) => i.status === 'exception');
+    const totalUnreconciledCents = exceptionItems.reduce(
+      (acc, item) => acc + Math.abs(dollarsToCents(item.amount)),
+      0
+    );
+
+    liveEvents.push({
+      project: 'closeproof',
+      event: 'packet_ready',
+      severity: 'info',
+      ts: now + (items.length + 2) * 250,
+      payload: {
+        run_id: runId,
+        status: 'ready',
+        summary: {
+          matched_count: matchedItems.length,
+          exception_count: exceptionItems.length,
+          total_unreconciled_cents: totalUnreconciledCents,
+        },
+      },
+    });
+
+    // Stream events into state with smooth pacing
+    liveEvents.forEach((ev, i) => {
+      setTimeout(() => {
+        pushTelemetryEvent(ev);
+        if (i === liveEvents.length - 1) {
+          setLifecycle('completed');
+          setIsRunningClose(false);
+          fetchPacket(runId);
+        }
+      }, i * 120);
+    });
+  };
+
+  // Upload modal success handler: store run_id, scroll, switch Agent Activity to Live, render warnings
+  const handleUploadSuccess = async (newRunId: string, warnings: string[]) => {
+    setRunId(newRunId);
+    setUploadWarnings(warnings);
+    setIsUploadModalOpen(false);
+    setActiveTab('closeroom');
+    setLifecycle('active');
+    switchMode('live');
+
+    // Scroll to Close Room
+    setTimeout(() => {
+      const closeroomEl = document.getElementById('closeroom');
+      closeroomEl?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+
+    try {
+      const apiUrl = getHttpApiUrl();
+      const res = await fetch(`${apiUrl}/api/runs/${encodeURIComponent(newRunId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const items: ReconItem[] = data.items || [];
+        animateLiveRunEvents(newRunId, items);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch uploaded run data:', err);
     }
   };
 
@@ -329,11 +364,42 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
       <Navbar onRunClose={handleRunClose} isRunning={isRunningClose} />
 
       {/* 2. Hero Section */}
-      <Hero onRunClose={handleRunClose} isRunning={isRunningClose} />
+      <Hero
+        onRunClose={handleRunClose}
+        onOpenUpload={() => setIsUploadModalOpen(true)}
+        isRunning={isRunningClose}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 px-4 sm:px-6 py-8">
         <div className="mx-auto max-w-7xl space-y-10">
+          {uploadWarnings.length > 0 && (
+            <div
+              className="rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400 flex items-start justify-between gap-3 animate-in fade-in"
+              role="alert"
+            >
+              <div className="flex items-start gap-2">
+                <span className="text-sm">⚠️</span>
+                <div>
+                  <div className="font-semibold text-foreground">Upload Warnings</div>
+                  <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                    {uploadWarnings.map((w, idx) => (
+                      <li key={idx}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadWarnings([])}
+                className="text-amber-700 dark:text-amber-400 hover:opacity-75 font-semibold text-sm px-1.5 py-0.5 rounded cursor-pointer"
+                aria-label="Dismiss warnings"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {activeTab === 'intake' ? (
             <DataIntake
               stagedFiles={stagedFiles}
@@ -363,6 +429,7 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
                   lifecycle={lifecycle}
                   isDemoMode={isDemoMode}
                   onOpenIntake={() => setActiveTab('intake')}
+                  onOpenUpload={() => setIsUploadModalOpen(true)}
                 />
               </section>
 
@@ -371,6 +438,7 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
                 <SourceStatusStrip
                   stagedFiles={stagedFiles}
                   onOpenIntake={() => setActiveTab('intake')}
+                  onOpenUpload={() => setIsUploadModalOpen(true)}
                 />
 
                 <ProcessingPipeline
@@ -401,8 +469,8 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
                 />
               </section>
 
-              {/* 5. Telemetry Section */}
-              <section id="telemetry" className="scroll-mt-18">
+              {/* 5. Agent Activity Section */}
+              <section id="agent-activity" className="scroll-mt-18">
                 <TelemetryFeed
                   events={events}
                   totalEventsCount={events.length}
@@ -424,9 +492,24 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
                 <PacketPreview state={state} markdownContent={packetMarkdown} />
               </section>
 
-              {/* 8. Architecture Section */}
+              {/* 8. Under the hood architecture section */}
               <section id="architecture" className="scroll-mt-18">
-                <WhyNemotron />
+                <details className="group rounded border border-border bg-surface p-4 text-xs">
+                  <summary className="font-semibold text-foreground cursor-pointer flex items-center justify-between list-none">
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-brand/10 text-brand font-semibold uppercase">
+                        Under the hood
+                      </span>
+                      <span className="text-sm font-bold">Architecture & Model Rationale</span>
+                    </span>
+                    <span className="text-foreground-muted group-open:rotate-180 transition-transform text-xs">
+                      ▼
+                    </span>
+                  </summary>
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <WhyNemotron />
+                  </div>
+                </details>
               </section>
 
               {/* Slide-out Right Drawer */}
@@ -447,6 +530,13 @@ export const CloseRoom: FC<CloseRoomProps> = ({ initialMode, initialDemo = false
           )}
         </div>
       </main>
+
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onUploadSuccess={handleUploadSuccess}
+      />
     </div>
   );
 };

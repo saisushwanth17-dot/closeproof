@@ -19,6 +19,7 @@ type CloseRoomHeaderProps = {
   lifecycle?: RunLifecycle;
   isDemoMode?: boolean;
   onOpenIntake?: () => void;
+  onOpenUpload?: () => void;
   className?: string;
 };
 
@@ -27,6 +28,7 @@ export const CloseRoomHeader: FC<CloseRoomHeaderProps> = ({
   lifecycle = 'active',
   isDemoMode = false,
   onOpenIntake,
+  onOpenUpload,
   className = '',
 }) => {
   const [copiedRunId, setCopiedRunId] = useState(false);
@@ -54,7 +56,7 @@ export const CloseRoomHeader: FC<CloseRoomHeaderProps> = ({
 
   return (
     <header className={`border-b border-border bg-surface ${className}`}>
-      {/* Top Banner: Forensic Assurance & Telemetry Health */}
+      {/* Top Banner: Forensic Assurance & Agent Activity Health */}
       <div className="border-b border-border bg-surface-subtle px-4 sm:px-6 py-2 text-xs font-medium text-foreground-muted">
         <div className="flex flex-wrap items-center justify-between gap-2 max-w-7xl mx-auto">
           <div className="flex items-center gap-2">
@@ -136,6 +138,22 @@ export const CloseRoomHeader: FC<CloseRoomHeaderProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Sample Data Honesty Banner */}
+      {(state.mode === 'replay' || isDemoMode || !state.runId) && (
+        <div className="border-b border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400 px-4 sm:px-6 py-1.5 text-[11px] font-medium flex flex-wrap items-center justify-between gap-2">
+          <span>Sample company data (Acme Global). Upload your own files to run a real close.</span>
+          {onOpenUpload && (
+            <button
+              type="button"
+              onClick={onOpenUpload}
+              className="underline hover:opacity-80 font-semibold cursor-pointer"
+            >
+              Upload your own files
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Main Bar: Title + Key Metrics */}
       <div className="px-4 sm:px-6 py-4 max-w-7xl mx-auto">

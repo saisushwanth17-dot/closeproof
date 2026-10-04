@@ -58,19 +58,19 @@ export function InvestigationTimeline({
               badgeColor = 'bg-brand/10 text-brand border-brand/30';
               break;
             case 'tavily_lookup':
-              eventLabel = 'Tavily Search';
+              eventLabel = 'Verified externally';
               eventSummary = typeof ev.payload.query === 'string'
                 ? `Vendor query: "${ev.payload.query}"`
                 : 'External merchant verification';
               badgeColor = 'bg-info-bg text-info border-info-border';
               break;
             case 'explain_done':
-              eventLabel = 'Nemotron Explanation';
-              eventSummary = 'Nemotron Ultra synthesized root cause & confidence';
+              eventLabel = 'Explanation ready';
+              eventSummary = 'Forensic reasoning synthesized root cause & confidence';
               badgeColor = 'bg-matched-bg text-matched border-matched-border';
               break;
             default:
-              eventSummary = 'Telemetry event logged';
+              eventSummary = 'Activity logged';
           }
 
           return (

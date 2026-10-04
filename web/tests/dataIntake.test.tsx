@@ -110,7 +110,7 @@ describe('ProcessingPipeline Component', () => {
 
   it('displays stage rationale when clicked', () => {
     render(<ProcessingPipeline currentStage="Waiting" lifecycle="active" />);
-    const nanoBtn = screen.getByRole('button', { name: /nemotron nano/i });
+    const nanoBtn = screen.getByRole('button', { name: /document parsing/i });
     fireEvent.click(nanoBtn);
 
     expect(screen.getByText(/architectural stage rationale/i)).toBeDefined();
